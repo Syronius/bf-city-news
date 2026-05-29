@@ -1,0 +1,9 @@
+services:
+  app:
+    build: ./fire_dept_app
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persist the SQLite DB and cities.json across container restarts
+      - ./fire_dept_app/data:/app/data
+    restart: unless-stopped
