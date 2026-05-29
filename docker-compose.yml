@@ -1,10 +1,10 @@
 services:
   app:
     build: ./fire_dept_app
-    # App listens on 8000 inside the container; Coolify's proxy routes the
-    # domain to this port. `expose` (not `ports`) avoids host-port ambiguity.
-    expose:
-      - "8000"
+    # Publish on host port 5555 so the Cloudflare Tunnel (Service URL
+    # http://localhost:5555) can reach the app. Container listens on 8000.
+    ports:
+      - "5555:8000"
     volumes:
       # Named volume persists the SQLite DB and cities.json across redeploys
       # (survives Coolify re-clones). Seeded on first run by entrypoint.sh.
