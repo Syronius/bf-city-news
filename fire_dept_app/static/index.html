@@ -132,6 +132,17 @@ a.headline:hover { text-decoration: underline; color: var(--blue); }
   font-size: .72rem; font-weight: 700; color: #fff; white-space: nowrap;
 }
 .empty { text-align: center; padding: 60px 20px; color: var(--muted); font-size: .95rem; }
+.loc-tag {
+  display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 5px;
+  font-size: .65rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+  vertical-align: middle;
+}
+.loc-tag.city   { background: #eff6ff; color: #1e40af; }
+.loc-tag.county { background: #f0fdf4; color: #166534; }
+
+/* Profile selector */
+.profile-label { font-size: .8rem; font-weight: 600; color: var(--muted); }
+.controls select:disabled { opacity: .5; cursor: not-allowed; }
 
 /* ── MODAL ── */
 .overlay {
@@ -152,6 +163,44 @@ a.headline:hover { text-decoration: underline; color: var(--blue); }
   cursor: pointer;
 }
 .modal .btn-outline-dark:hover { background: var(--bg); }
+
+/* About / Architecture */
+.modal.wide { width: min(760px, 94vw); }
+.about-intro { font-size: .9rem; line-height: 1.6; margin-bottom: 4px; }
+.about-h {
+  font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--muted); margin: 22px 0 10px;
+}
+/* top-level component diagram */
+.arch-row { display: flex; align-items: stretch; gap: 8px; flex-wrap: wrap; }
+.arch-box {
+  flex: 1; min-width: 150px; background: var(--bg); border: 1px solid var(--border);
+  border-radius: 9px; padding: 10px 13px;
+}
+.arch-box b { display: block; font-size: .82rem; color: var(--navy); }
+.arch-box span { font-size: .72rem; color: var(--muted); }
+.arch-arrow { display: flex; align-items: center; color: var(--blue); font-size: 1.2rem; font-weight: 700; }
+/* numbered pipeline */
+.pipe { display: flex; flex-direction: column; gap: 14px; }
+.pipe-step { display: flex; gap: 12px; align-items: flex-start; }
+.pipe-num {
+  flex: none; width: 26px; height: 26px; border-radius: 50%; background: var(--blue);
+  color: #fff; font-weight: 700; font-size: .8rem; display: flex;
+  align-items: center; justify-content: center;
+}
+.pipe-step .pbody { padding-top: 2px; }
+.pipe-step .pbody b { font-size: .85rem; }
+.pipe-step .pbody p { font-size: .79rem; color: var(--muted); margin-top: 3px; line-height: 1.45; }
+/* stack grid */
+.stack-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 8px; }
+.stack-item { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+.stack-item b { display: block; font-size: .81rem; color: var(--navy); margin-bottom: 2px; }
+.stack-item span { font-size: .74rem; color: var(--muted); line-height: 1.4; }
+/* deployment flow */
+.deploy-flow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.deploy-flow .chip { background: var(--navy); color: #fff; padding: 5px 11px; border-radius: 6px;
+                     font-size: .76rem; font-weight: 600; }
+.deploy-flow .sep { color: var(--blue); font-weight: 700; }
 
 /* City manager */
 .state-block { margin-bottom: 20px; }
@@ -192,7 +241,9 @@ a.headline:hover { text-decoration: underline; color: var(--blue); }
 <header>
   <h1>🔥 CA Fire Dept News</h1>
   <div class="header-right">
-    <button class="btn btn-outline" onclick="openCityManager()">⚙ Manage Cities</button>
+    <button class="btn btn-outline" onclick="openAbout()">ⓘ About</button>
+    <button class="btn btn-outline" onclick="openManager('cities')">⚙ Cities</button>
+    <button class="btn btn-outline" onclick="openManager('counties')">⚙ Counties</button>
     <button class="btn btn-primary" id="scrape-btn" onclick="startScrape()">▶ Run Scrape</button>
   </div>
 </header>
@@ -214,6 +265,9 @@ a.headline:hover { text-decoration: underline; color: var(--blue); }
   <div class="stat-card">
     <div><div class="val" id="stat-cities">—</div><div class="lbl">Cities</div></div>
   </div>
+  <div class="stat-card">
+    <div><div class="val" id="stat-counties">—</div><div class="lbl">Counties</div></div>
+  </div>
   <div class="stat-card" id="stat-last-run-card" style="display:none">
     <div><div class="val" id="stat-last-run" style="font-size:.9rem">—</div><div class="lbl">Last Scraped</div></div>
   </div>
@@ -221,9 +275,13 @@ a.headline:hover { text-decoration: underline; color: var(--blue); }
 
 <!-- CONTROLS -->
 <div class="controls">
-  <input id="search" type="text" placeholder="Search headlines, cities, sources…" oninput="applyFilters()">
-  <select id="filterCity" onchange="applyFilters()">
-    <option value="">All Cities</option>
+  <label class="profile-label" for="filterProfile">Profile</label>
+  <select id="filterProfile" onchange="applyProfile(this.value)"></select>
+  <button class="btn btn-sm btn-primary" onclick="saveProfile()" title="Save current filters as a profile">＋ Save</button>
+  <button class="btn btn-sm btn-danger" id="delete-profile-btn" onclick="deleteProfile()" title="Delete this profile" style="display:none">🗑</button>
+  <input id="search" type="text" placeholder="Search headlines, locations, sources…" oninput="applyFilters()">
+  <select id="filterLoc" onchange="applyFilters()">
+    <option value="">All Locations</option>
   </select>
   <select id="filterCat" onchange="applyFilters()">
     <option value="">All Categories</option>
@@ -243,9 +301,9 @@ a.headline:hover { text-decoration: underline; color: var(--blue); }
   <table>
     <thead>
       <tr>
-        <th onclick="sortBy('date')"     data-col="date">    Date     <span class="arr"></span></th>
-        <th onclick="sortBy('city')"     data-col="city">    City     <span class="arr"></span></th>
-        <th onclick="sortBy('category')" data-col="category">Category <span class="arr"></span></th>
+        <th onclick="sortBy('date')"     data-col="date">     Date     <span class="arr"></span></th>
+        <th onclick="sortBy('location')" data-col="location"> Location <span class="arr"></span></th>
+        <th onclick="sortBy('category')" data-col="category"> Category <span class="arr"></span></th>
         <th>Headline</th>
         <th onclick="sortBy('source')"   data-col="source">  Source   <span class="arr"></span></th>
         <th>Snippet</th>
@@ -255,14 +313,82 @@ a.headline:hover { text-decoration: underline; color: var(--blue); }
   </table>
 </div>
 
-<!-- CITY MANAGER MODAL -->
-<div class="overlay" id="city-modal">
+<!-- PLACE MANAGER MODAL (cities or counties) -->
+<div class="overlay" id="place-modal">
   <div class="modal">
-    <h2>⚙ Manage Cities</h2>
-    <div id="city-manager-body"></div>
+    <h2 id="manager-title">⚙ Manage</h2>
+    <div id="manager-body"></div>
     <div class="modal-footer">
-      <button class="btn-outline-dark" onclick="closeCityManager()">Cancel</button>
-      <button class="btn btn-primary" onclick="saveCities()">Save Changes</button>
+      <button class="btn-outline-dark" onclick="closeManager()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveManager()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- ABOUT / ARCHITECTURE MODAL -->
+<div class="overlay" id="about-modal">
+  <div class="modal wide">
+    <h2>🔥 About this app</h2>
+    <p class="about-intro">
+      A live tool that aggregates California fire-department news by <b>city</b> and <b>county</b>.
+      You choose what to track, click <b>Run Scrape</b>, and the app pulls fresh coverage from
+      Google News, auto-categorizes each story, and lets you filter, search, and export it.
+    </p>
+
+    <div class="about-h">Architecture at a glance</div>
+    <div class="arch-row">
+      <div class="arch-box"><b>Browser UI</b><span>Single-page vanilla HTML / CSS / JS — no framework</span></div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-box"><b>FastAPI · Uvicorn</b><span>Python REST API + background scraper</span></div>
+      <div class="arch-arrow">→</div>
+      <div class="arch-box"><b>Google News RSS</b><span>Public search feeds, queried per place</span></div>
+    </div>
+    <div class="arch-row" style="margin-top:8px">
+      <div class="arch-box"><b>SQLite</b><span>Stores articles, de-duplicated by URL</span></div>
+      <div class="arch-box"><b>JSON config</b><span>Editable city &amp; county lists (persist across redeploys)</span></div>
+    </div>
+
+    <div class="about-h">What happens when you scrape</div>
+    <div class="pipe">
+      <div class="pipe-step"><div class="pipe-num">1</div><div class="pbody">
+        <b>Kick off</b><p>Clicking Run Scrape starts a background job on the server — the UI stays responsive and shows a live progress bar.</p>
+      </div></div>
+      <div class="pipe-step"><div class="pipe-num">2</div><div class="pbody">
+        <b>Query the news</b><p>For every city and county on your lists, it runs six targeted Google News searches (budget, staffing, leadership, incidents, and more).</p>
+      </div></div>
+      <div class="pipe-step"><div class="pipe-num">3</div><div class="pbody">
+        <b>Categorize</b><p>Each headline is tagged by keyword rules into Budget/Funding, Staffing/Labor, Incident/Disaster, and other categories.</p>
+      </div></div>
+      <div class="pipe-step"><div class="pipe-num">4</div><div class="pbody">
+        <b>Store</b><p>Results are de-duplicated by URL and written to SQLite, so re-running a scrape only adds genuinely new articles.</p>
+      </div></div>
+      <div class="pipe-step"><div class="pipe-num">5</div><div class="pbody">
+        <b>Explore</b><p>Switch between <b>Cities</b> and <b>Counties</b> profiles (or save your own), filter and search, sort columns, and export the current view to CSV or Excel.</p>
+      </div></div>
+    </div>
+
+    <div class="about-h">The stack</div>
+    <div class="stack-grid">
+      <div class="stack-item"><b>Frontend</b><span>Vanilla HTML/CSS/JS served as static files — fast, dependency-free.</span></div>
+      <div class="stack-item"><b>Backend</b><span>FastAPI on a Uvicorn ASGI server (Python).</span></div>
+      <div class="stack-item"><b>Storage</b><span>SQLite file database + JSON config for place lists.</span></div>
+      <div class="stack-item"><b>Data source</b><span>Google News RSS — no API keys or paid services.</span></div>
+    </div>
+
+    <div class="about-h">Deployment</div>
+    <div class="deploy-flow">
+      <span class="chip">Docker container</span><span class="sep">→</span>
+      <span class="chip">Coolify</span><span class="sep">→</span>
+      <span class="chip">Cloudflare Tunnel</span><span class="sep">→</span>
+      <span class="chip">Your browser</span>
+    </div>
+    <p class="about-intro" style="margin-top:12px;font-size:.8rem;color:var(--muted)">
+      The whole app ships as one Docker image. A persistent volume keeps the database and your
+      city/county lists intact across redeploys.
+    </p>
+
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="closeAbout()">Got it</button>
     </div>
   </div>
 </div>
@@ -287,10 +413,27 @@ let filtered    = [];
 let sortCol     = "date";
 let sortDir     = -1;
 let pollTimer   = null;
-let cityData    = {};
+let stats       = { city_list: [], county_list: [], cat_list: [] };
+
+// Search profiles. Built-ins set the scope (which kind of article to show);
+// custom profiles also capture location/category/search and live in localStorage.
+const BUILTIN_PROFILES = [
+  { id: "all",      name: "All news", scope: "all",      builtin: true },
+  { id: "cities",   name: "Cities",   scope: "cities",   builtin: true },
+  { id: "counties", name: "Counties", scope: "counties", builtin: true },
+];
+let profiles      = [];        // custom profiles only
+let activeProfile = "all";
+let currentScope  = "all";
+
+// Place manager (shared modal for cities + counties)
+let manageData = {};
+let manageKind = "cities";
 
 // ── Init ───────────────────────────────────────────────────────────────────
 async function init() {
+  loadProfiles();
+  renderProfileSelect();
   await Promise.all([loadStats(), loadArticles()]);
   checkScrapeStatus();
 }
@@ -298,16 +441,37 @@ async function init() {
 async function loadStats() {
   const s = await apiFetch("/api/stats");
   if (!s) return;
-  document.getElementById("stat-total").textContent  = s.total.toLocaleString();
-  document.getElementById("stat-cities").textContent = s.cities;
+  stats = s;
+  document.getElementById("stat-total").textContent    = s.total.toLocaleString();
+  document.getElementById("stat-cities").textContent   = s.cities;
+  document.getElementById("stat-counties").textContent = s.counties;
 
-  const citySelect = document.getElementById("filterCity");
-  citySelect.innerHTML = '<option value="">All Cities</option>' +
-    s.city_list.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
+  renderLocationOptions();
 
   const catSelect = document.getElementById("filterCat");
+  const prevCat   = catSelect.value;
   catSelect.innerHTML = '<option value="">All Categories</option>' +
     s.cat_list.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
+  catSelect.value = prevCat;
+}
+
+// Rebuild the Location dropdown to match the active scope.
+function renderLocationOptions() {
+  const sel  = document.getElementById("filterLoc");
+  const prev = sel.value;
+  if (currentScope === "cities") {
+    sel.disabled = false;
+    sel.innerHTML = '<option value="">All Cities</option>' +
+      stats.city_list.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
+  } else if (currentScope === "counties") {
+    sel.disabled = false;
+    sel.innerHTML = '<option value="">All Counties</option>' +
+      stats.county_list.map(c => `<option value="${esc(c)}">${esc(c)} County</option>`).join("");
+  } else {
+    sel.disabled = true;
+    sel.innerHTML = '<option value="">All Locations</option>';
+  }
+  sel.value = prev;  // preserve selection if still valid
 }
 
 async function loadArticles() {
@@ -319,23 +483,31 @@ async function loadArticles() {
 
 // ── Filters & Sort ─────────────────────────────────────────────────────────
 function applyFilters() {
-  const q    = document.getElementById("search").value.toLowerCase();
-  const city = document.getElementById("filterCity").value;
-  const cat  = document.getElementById("filterCat").value;
+  const q   = document.getElementById("search").value.toLowerCase();
+  const loc = document.getElementById("filterLoc").value;
+  const cat = document.getElementById("filterCat").value;
 
   filtered = allArticles.filter(r => {
-    if (city && r.city !== city) return false;
-    if (cat  && r.category !== cat) return false;
+    const isCity   = !!(r.city   && r.city.trim());
+    const isCounty = !!(r.county && r.county.trim());
+    if (currentScope === "cities"   && !isCity)   return false;
+    if (currentScope === "counties" && !isCounty) return false;
+    if (loc) {
+      if (currentScope === "cities"   && r.city   !== loc) return false;
+      if (currentScope === "counties" && r.county !== loc) return false;
+    }
+    if (cat && r.category !== cat) return false;
     if (q) {
-      const hay = (r.headline + r.city + r.source + r.snippet + r.category).toLowerCase();
+      const hay = (r.headline + (r.city || "") + (r.county || "") +
+                   r.source + r.snippet + r.category).toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
   });
 
+  const sortVal = r => (sortCol === "location" ? (r.city || r.county || "") : (r[sortCol] || "")).toString();
   filtered.sort((a, b) => {
-    const av = (a[sortCol] || "").toString();
-    const bv = (b[sortCol] || "").toString();
+    const av = sortVal(a), bv = sortVal(b);
     return av < bv ? -sortDir : av > bv ? sortDir : 0;
   });
 
@@ -362,16 +534,90 @@ function renderTable() {
     return;
   }
   tbody.innerHTML = filtered.map(r => {
-    const color = CAT_COLORS[r.category] || "#6b7280";
+    const color    = CAT_COLORS[r.category] || "#6b7280";
+    const isCounty = !(r.city && r.city.trim()) && (r.county && r.county.trim());
+    const locName  = isCounty ? `${r.county} County` : (r.city || "");
+    const locTag   = isCounty
+      ? '<span class="loc-tag county">County</span>'
+      : (r.city ? '<span class="loc-tag city">City</span>' : "");
     return `<tr>
       <td class="date">${esc(r.date)}</td>
-      <td class="city">${esc(r.city)}</td>
+      <td class="city">${esc(locName)}${locTag}</td>
       <td><span class="badge" style="background:${color}">${esc(r.category)}</span></td>
       <td><a class="headline" href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.headline)}</a></td>
       <td class="source">${esc(r.source)}</td>
       <td class="snippet">${esc(r.snippet)}</td>
     </tr>`;
   }).join("");
+}
+
+// ── Search Profiles ──────────────────────────────────────────────────────
+const PROFILE_KEY = "fdn_profiles";
+
+function loadProfiles() {
+  try { profiles = JSON.parse(localStorage.getItem(PROFILE_KEY)) || []; }
+  catch { profiles = []; }
+}
+function persistProfiles() {
+  localStorage.setItem(PROFILE_KEY, JSON.stringify(profiles));
+}
+function allProfiles() { return BUILTIN_PROFILES.concat(profiles); }
+function getProfile(id) { return allProfiles().find(p => p.id === id) || BUILTIN_PROFILES[0]; }
+
+function renderProfileSelect() {
+  const sel = document.getElementById("filterProfile");
+  const builtins = BUILTIN_PROFILES.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join("");
+  const custom   = profiles.length
+    ? '<optgroup label="Saved">' +
+        profiles.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("") +
+      '</optgroup>'
+    : "";
+  sel.innerHTML = builtins + custom;
+  sel.value = activeProfile;
+}
+
+// Apply a profile: set scope, rebuild the location list, then restore filters.
+function applyProfile(id) {
+  const p = getProfile(id);
+  activeProfile = p.id;
+  currentScope  = p.scope;
+  renderLocationOptions();
+  document.getElementById("filterLoc").value = p.location || "";
+  document.getElementById("filterCat").value = p.category || "";
+  document.getElementById("search").value    = p.search   || "";
+  document.getElementById("delete-profile-btn").style.display = p.builtin ? "none" : "";
+  applyFilters();
+}
+
+function saveProfile() {
+  const name = (prompt("Save current filters as a profile named:") || "").trim();
+  if (!name) return;
+  const p = {
+    id:       "c" + Date.now(),
+    name,
+    scope:    currentScope,
+    location: document.getElementById("filterLoc").value,
+    category: document.getElementById("filterCat").value,
+    search:   document.getElementById("search").value,
+    builtin:  false,
+  };
+  profiles.push(p);
+  persistProfiles();
+  activeProfile = p.id;
+  renderProfileSelect();
+  document.getElementById("delete-profile-btn").style.display = "";
+  showToast(`Profile "${name}" saved.`);
+}
+
+function deleteProfile() {
+  const p = getProfile(activeProfile);
+  if (p.builtin) return;
+  profiles = profiles.filter(x => x.id !== p.id);
+  persistProfiles();
+  activeProfile = "all";
+  renderProfileSelect();
+  applyProfile("all");
+  showToast(`Profile "${p.name}" deleted.`);
 }
 
 // ── Scraping ───────────────────────────────────────────────────────────────
@@ -428,71 +674,85 @@ async function pollScrape() {
 
 // ── Export ─────────────────────────────────────────────────────────────────
 function exportData(fmt) {
-  const q    = encodeURIComponent(document.getElementById("search").value);
-  const city = encodeURIComponent(document.getElementById("filterCity").value);
-  const cat  = encodeURIComponent(document.getElementById("filterCat").value);
-  window.location.href = `/api/export/${fmt}?q=${q}&city=${city}&category=${cat}`;
+  const loc   = document.getElementById("filterLoc").value;
+  const p     = new URLSearchParams();
+  p.set("q", document.getElementById("search").value);
+  p.set("category", document.getElementById("filterCat").value);
+  if (currentScope !== "all") p.set("scope", currentScope);
+  if (loc && currentScope === "cities")   p.set("city", loc);
+  if (loc && currentScope === "counties") p.set("county", loc);
+  window.location.href = `/api/export/${fmt}?${p.toString()}`;
 }
 
-// ── City Manager ───────────────────────────────────────────────────────────
-async function openCityManager() {
-  const data = await apiFetch("/api/cities");
+// ── About ────────────────────────────────────────────────────────────────
+function openAbout()  { document.getElementById("about-modal").classList.add("open"); }
+function closeAbout() { document.getElementById("about-modal").classList.remove("open"); }
+
+// ── Place Manager (cities or counties) ──────────────────────────────────────
+const KIND_NOUN = { cities: "City", counties: "County" };
+
+async function openManager(kind) {
+  manageKind = kind;
+  const data = await apiFetch(`/api/${kind}`);
   if (!data) return;
-  cityData = JSON.parse(JSON.stringify(data));  // deep clone
-  renderCityManager();
-  document.getElementById("city-modal").classList.add("open");
+  manageData = JSON.parse(JSON.stringify(data));  // deep clone
+  document.getElementById("manager-title").textContent =
+    kind === "counties" ? "⚙ Manage Counties" : "⚙ Manage Cities";
+  renderManager();
+  document.getElementById("place-modal").classList.add("open");
 }
 
-function closeCityManager() {
-  document.getElementById("city-modal").classList.remove("open");
+function closeManager() {
+  document.getElementById("place-modal").classList.remove("open");
 }
 
-function renderCityManager() {
-  const body = document.getElementById("city-manager-body");
-  body.innerHTML = Object.entries(cityData).map(([state, cities]) => `
+function renderManager() {
+  const noun = KIND_NOUN[manageKind];
+  const body = document.getElementById("manager-body");
+  body.innerHTML = Object.entries(manageData).map(([state, names]) => `
     <div class="state-block" data-state="${esc(state)}">
       <h3>${esc(state)}</h3>
       <div class="city-tags" id="tags-${esc(state)}">
-        ${cities.map(c => cityTag(state, c)).join("")}
+        ${names.map(c => placeTag(state, c)).join("")}
       </div>
       <div class="add-city-row">
-        <input type="text" placeholder="Add city…" id="add-input-${esc(state)}"
-               onkeydown="if(event.key==='Enter') addCity('${esc(state)}')">
-        <button class="btn btn-sm btn-primary" onclick="addCity('${esc(state)}')">+ Add</button>
+        <input type="text" placeholder="Add ${noun.toLowerCase()}…" id="add-input-${esc(state)}"
+               onkeydown="if(event.key==='Enter') addPlace('${esc(state)}')">
+        <button class="btn btn-sm btn-primary" onclick="addPlace('${esc(state)}')">+ Add</button>
       </div>
     </div>
   `).join("");
 }
 
-function cityTag(state, city) {
-  return `<span class="city-tag">${esc(city)}
-    <button onclick="removeCity('${esc(state)}','${esc(city)}')" title="Remove">×</button>
+function placeTag(state, name) {
+  return `<span class="city-tag">${esc(name)}
+    <button onclick="removePlace('${esc(state)}','${esc(name)}')" title="Remove">×</button>
   </span>`;
 }
 
-function removeCity(state, city) {
-  cityData[state] = cityData[state].filter(c => c !== city);
-  renderCityManager();
+function removePlace(state, name) {
+  manageData[state] = manageData[state].filter(c => c !== name);
+  renderManager();
 }
 
-function addCity(state) {
+function addPlace(state) {
   const input = document.getElementById(`add-input-${state}`);
   const val   = input.value.trim();
   if (!val) return;
-  if (!cityData[state].includes(val)) cityData[state].push(val);
+  if (!manageData[state].includes(val)) manageData[state].push(val);
   input.value = "";
-  renderCityManager();
+  renderManager();
 }
 
-async function saveCities() {
-  const res = await apiFetch("/api/cities", {
+async function saveManager() {
+  const res = await apiFetch(`/api/${manageKind}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ cities: cityData }),
+    body: JSON.stringify({ [manageKind]: manageData }),
   });
   if (res) {
-    closeCityManager();
-    showToast("Cities saved. Run a new scrape to fetch news for updated cities.");
+    closeManager();
+    showToast(`${KIND_NOUN[manageKind] === "City" ? "Cities" : "Counties"} saved. Run a new scrape to fetch news for the updates.`);
   }
 }
 

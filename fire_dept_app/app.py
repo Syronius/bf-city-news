@@ -31,6 +31,7 @@ import pandas as pd
 BASE_DIR = Path(__file__).parent
 DB_PATH  = BASE_DIR / "data" / "articles.db"
 CFG_PATH = BASE_DIR / "data" / "cities.json"
+COUNTIES_PATH = BASE_DIR / "data" / "counties.json"
 
 # ---------------------------------------------------------------------------
 # DATABASE
@@ -48,6 +49,7 @@ def init_db():
                 id       INTEGER PRIMARY KEY AUTOINCREMENT,
                 state    TEXT,
                 city     TEXT,
+                county   TEXT,
                 category TEXT,
                 date     TEXT,
                 headline TEXT,
@@ -57,18 +59,29 @@ def init_db():
                 scraped_at TEXT
             )
         """)
+        # Migrate older DBs (persisted in the volume) that predate the county column.
+        cols = {r[1] for r in conn.execute("PRAGMA table_info(articles)").fetchall()}
+        if "county" not in cols:
+            conn.execute("ALTER TABLE articles ADD COLUMN county TEXT")
         conn.commit()
+
+def load_json(path: Path) -> dict:
+    """Read a {state: [names]} config file; return {} if it doesn't exist yet."""
+    if not path.exists():
+        return {}
+    with open(path) as f:
+        return json.load(f)
 
 # ---------------------------------------------------------------------------
 # SCRAPER LOGIC
 # ---------------------------------------------------------------------------
 QUERY_TEMPLATES = [
-    '"{city}" fire department',
-    '"{city}" fire department budget',
-    '"{city}" fire department staffing',
-    '"{city}" fire department chief',
-    '"{city}" wildfire emergency',
-    '"{city}" fire department incident',
+    '"{place}" fire department',
+    '"{place}" fire department budget',
+    '"{place}" fire department staffing',
+    '"{place}" fire department chief',
+    '"{place}" wildfire emergency',
+    '"{place}" fire department incident',
 ]
 
 CATEGORIES = {
@@ -144,11 +157,20 @@ def run_scrape():
         scrape_state["error"]     = None
 
     try:
-        with open(CFG_PATH) as f:
-            cities_cfg = json.load(f)
+        cities_cfg   = load_json(CFG_PATH)
+        counties_cfg = load_json(COUNTIES_PATH)
 
-        pairs = [(state, city) for state, cities in cities_cfg.items() for city in cities]
-        total = len(pairs) * len(QUERY_TEMPLATES)
+        # Each target: (state, kind, label, place). `place` is the phrase put in
+        # the search query; `label` is what's stored in the city/county column.
+        targets = []
+        for state, cities in cities_cfg.items():
+            for city in cities:
+                targets.append((state, "city", city, city))
+        for state, counties in counties_cfg.items():
+            for county in counties:
+                targets.append((state, "county", county, f"{county} County"))
+
+        total = len(targets) * len(QUERY_TEMPLATES)
 
         with scrape_lock:
             scrape_state["total"] = total
@@ -159,12 +181,15 @@ def run_scrape():
 
         conn = get_db()
         try:
-            for state, city in pairs:
+            for state, kind, label, place in targets:
+                city   = label if kind == "city"   else None
+                county = label if kind == "county" else None
                 with scrape_lock:
-                    scrape_state["current"] = f"{city}, {state}"
+                    suffix = " County" if kind == "county" else ""
+                    scrape_state["current"] = f"{label}{suffix}, {state}"
 
                 for template in QUERY_TEMPLATES:
-                    query = template.format(city=city)
+                    query = template.format(place=place)
                     results = fetch_rss(query)
 
                     for r in results:
@@ -172,9 +197,9 @@ def run_scrape():
                         try:
                             conn.execute(
                                 """INSERT OR IGNORE INTO articles
-                                   (state, city, category, date, headline, source, snippet, url, scraped_at)
-                                   VALUES (?,?,?,?,?,?,?,?,?)""",
-                                (state, city, cat, r["date"], r["headline"],
+                                   (state, city, county, category, date, headline, source, snippet, url, scraped_at)
+                                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                                (state, city, county, cat, r["date"], r["headline"],
                                  r["source"], r["snippet"], r["url"], scraped_at)
                             )
                             if conn.execute("SELECT changes()").fetchone()[0]:
@@ -213,7 +238,9 @@ app = FastAPI(title="Fire Dept News")
 @app.get("/api/articles")
 def get_articles(
     q:        Optional[str] = Query(None),
+    scope:    Optional[str] = Query(None),  # "cities" | "counties" | None (all)
     city:     Optional[str] = Query(None),
+    county:   Optional[str] = Query(None),
     category: Optional[str] = Query(None),
     limit:    int = Query(500, le=2000),
     offset:   int = Query(0),
@@ -221,16 +248,23 @@ def get_articles(
     sql    = "SELECT * FROM articles WHERE 1=1"
     params = []
 
+    if scope == "cities":
+        sql += " AND city <> ''"
+    elif scope == "counties":
+        sql += " AND county <> ''"
     if city:
         sql += " AND city = ?"
         params.append(city)
+    if county:
+        sql += " AND county = ?"
+        params.append(county)
     if category:
         sql += " AND category = ?"
         params.append(category)
     if q:
-        sql += " AND (headline LIKE ? OR snippet LIKE ? OR source LIKE ?)"
+        sql += " AND (headline LIKE ? OR snippet LIKE ? OR source LIKE ? OR city LIKE ? OR county LIKE ?)"
         like = f"%{q}%"
-        params += [like, like, like]
+        params += [like, like, like, like, like]
 
     sql += " ORDER BY date DESC, id DESC LIMIT ? OFFSET ?"
     params += [limit, offset]
@@ -253,24 +287,30 @@ def get_articles(
 @app.get("/api/stats")
 def get_stats():
     with get_db() as conn:
-        total     = conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
-        cities    = conn.execute("SELECT COUNT(DISTINCT city) FROM articles").fetchone()[0]
-        by_cat    = conn.execute(
+        total       = conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
+        cities      = conn.execute("SELECT COUNT(DISTINCT city) FROM articles WHERE city <> ''").fetchone()[0]
+        counties    = conn.execute("SELECT COUNT(DISTINCT county) FROM articles WHERE county <> ''").fetchone()[0]
+        by_cat      = conn.execute(
             "SELECT category, COUNT(*) as n FROM articles GROUP BY category ORDER BY n DESC"
         ).fetchall()
-        city_list = conn.execute(
-            "SELECT DISTINCT city FROM articles ORDER BY city"
+        city_list   = conn.execute(
+            "SELECT DISTINCT city FROM articles WHERE city <> '' ORDER BY city"
         ).fetchall()
-        cat_list  = conn.execute(
+        county_list = conn.execute(
+            "SELECT DISTINCT county FROM articles WHERE county <> '' ORDER BY county"
+        ).fetchall()
+        cat_list    = conn.execute(
             "SELECT DISTINCT category FROM articles ORDER BY category"
         ).fetchall()
 
     return {
-        "total":     total,
-        "cities":    cities,
-        "by_cat":    [dict(r) for r in by_cat],
-        "city_list": [r[0] for r in city_list],
-        "cat_list":  [r[0] for r in cat_list],
+        "total":       total,
+        "cities":      cities,
+        "counties":    counties,
+        "by_cat":      [dict(r) for r in by_cat],
+        "city_list":   [r[0] for r in city_list],
+        "county_list": [r[0] for r in county_list],
+        "cat_list":    [r[0] for r in cat_list],
     }
 
 
@@ -293,8 +333,7 @@ def scrape_status():
 # Cities management
 @app.get("/api/cities")
 def get_cities():
-    with open(CFG_PATH) as f:
-        return json.load(f)
+    return load_json(CFG_PATH)
 
 
 class CitiesPayload(BaseModel):
@@ -307,19 +346,37 @@ def update_cities(payload: CitiesPayload):
     return {"status": "saved"}
 
 
+# Counties management
+@app.get("/api/counties")
+def get_counties():
+    return load_json(COUNTIES_PATH)
+
+
+class CountiesPayload(BaseModel):
+    counties: dict  # {"California": ["Los Angeles", ...], ...}
+
+@app.put("/api/counties")
+def update_counties(payload: CountiesPayload):
+    with open(COUNTIES_PATH, "w") as f:
+        json.dump(payload.counties, f, indent=2)
+    return {"status": "saved"}
+
+
 # Export
 @app.get("/api/export/csv")
 def export_csv(
     q:        Optional[str] = Query(None),
+    scope:    Optional[str] = Query(None),
     city:     Optional[str] = Query(None),
+    county:   Optional[str] = Query(None),
     category: Optional[str] = Query(None),
 ):
-    data = get_articles(q=q, city=city, category=category, limit=10000, offset=0)
+    data = get_articles(q=q, scope=scope, city=city, county=county, category=category, limit=10000, offset=0)
     df   = pd.DataFrame(data["items"])
     if df.empty:
         raise HTTPException(404, "No data to export")
     buf = io.StringIO()
-    df[["state","city","category","date","headline","source","snippet","url"]].to_csv(buf, index=False)
+    df[["state","city","county","category","date","headline","source","snippet","url"]].to_csv(buf, index=False)
     buf.seek(0)
     today = datetime.today().strftime("%Y-%m-%d")
     return StreamingResponse(
@@ -332,16 +389,18 @@ def export_csv(
 @app.get("/api/export/xlsx")
 def export_xlsx(
     q:        Optional[str] = Query(None),
+    scope:    Optional[str] = Query(None),
     city:     Optional[str] = Query(None),
+    county:   Optional[str] = Query(None),
     category: Optional[str] = Query(None),
 ):
-    data = get_articles(q=q, city=city, category=category, limit=10000, offset=0)
+    data = get_articles(q=q, scope=scope, city=city, county=county, category=category, limit=10000, offset=0)
     df   = pd.DataFrame(data["items"])
     if df.empty:
         raise HTTPException(404, "No data to export")
 
-    df = df[["state","city","category","date","headline","source","snippet","url"]]
-    df.columns = ["State","City","Category","Date","Headline","Source","Snippet","URL"]
+    df = df[["state","city","county","category","date","headline","source","snippet","url"]]
+    df.columns = ["State","City","County","Category","Date","Headline","Source","Snippet","URL"]
 
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as writer:
@@ -349,9 +408,9 @@ def export_xlsx(
         ws = writer.sheets["News"]
         ws.freeze_panes = "A2"
         ws.auto_filter.ref = ws.dimensions
-        for col, width in zip("ABCDEFGH", [14,20,22,12,60,22,60,50]):
+        for col, width in zip("ABCDEFGHI", [14,20,20,22,12,60,22,60,50]):
             ws.column_dimensions[col].width = width
-        summary = df.groupby(["State","City","Category"]).size().reset_index(name="Count")
+        summary = df.groupby(["State","City","County","Category"]).size().reset_index(name="Count")
         summary.to_excel(writer, index=False, sheet_name="Summary")
     buf.seek(0)
 

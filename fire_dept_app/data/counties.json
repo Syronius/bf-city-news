@@ -1,0 +1,9 @@
+{
+  "California": [
+    "Los Angeles", "San Diego", "Orange", "Riverside", "San Bernardino",
+    "Santa Clara", "Alameda", "Sacramento", "Contra Costa", "Fresno",
+    "Kern", "Ventura", "San Francisco", "San Mateo", "San Joaquin",
+    "Stanislaus", "Sonoma", "Tulare", "Santa Barbara", "Solano",
+    "Monterey", "Placer", "San Luis Obispo", "Santa Cruz", "Marin"
+  ]
+}
