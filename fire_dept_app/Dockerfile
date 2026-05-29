@@ -15,6 +15,6 @@ COPY data ./seed
 COPY entrypoint.sh .
 RUN chmod +x entrypoint.sh
 
-EXPOSE 8000
+EXPOSE 5555
 
 ENTRYPOINT ["./entrypoint.sh"]

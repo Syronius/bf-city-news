@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 import uvicorn
+import os
 import sqlite3
 import json
 import io
@@ -374,5 +375,6 @@ app.mount("/", StaticFiles(directory=str(BASE_DIR / "static"), html=True), name=
 if __name__ == "__main__":
     print("Initializing database…")
     init_db()
-    print("Starting server at http://localhost:8000")
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=False)
+    port = int(os.environ.get("PORT", "8000"))
+    print(f"Starting server at http://localhost:{port}")
+    uvicorn.run(app, host="0.0.0.0", port=port, reload=False)
