@@ -1,10 +1,10 @@
 services:
   app:
     build: ./fire_dept_app
-    # Publish on host port 5555 so the Cloudflare Tunnel (Service URL
-    # http://localhost:5555) can reach the app. Container listens on 8000.
+    # Publish on host port 8000 (matches the container port). Point the
+    # Cloudflare Tunnel Service URL at http://<host-ip>:8000.
     ports:
-      - "5555:8000"
+      - "8000:8000"
     volumes:
       # Named volume persists the SQLite DB and cities.json across redeploys
       # (survives Coolify re-clones). Seeded on first run by entrypoint.sh.
