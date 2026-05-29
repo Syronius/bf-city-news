@@ -7,8 +7,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app.py .
 COPY static ./static
-COPY data ./data
+
+# Default data files are baked into /app/seed; the entrypoint copies any
+# that are missing into the /app/data volume on first run, so the named
+# volume persists scraped data across redeploys without starting empty.
+COPY data ./seed
+COPY entrypoint.sh .
+RUN chmod +x entrypoint.sh
 
 EXPOSE 8000
 
-CMD ["python", "app.py"]
+ENTRYPOINT ["./entrypoint.sh"]

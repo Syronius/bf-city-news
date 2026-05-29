@@ -4,6 +4,10 @@ services:
     ports:
       - "5555:8000"
     volumes:
-      # Persist the SQLite DB and cities.json across container restarts
-      - ./fire_dept_app/data:/app/data
+      # Named volume persists the SQLite DB and cities.json across redeploys
+      # (survives Coolify re-clones). Seeded on first run by entrypoint.sh.
+      - articles-data:/app/data
     restart: unless-stopped
+
+volumes:
+  articles-data:
