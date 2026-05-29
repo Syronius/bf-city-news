@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CA Fire Dept News</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --navy:   #1e3a5f;
+  --navy2:  #2d4f7c;
+  --blue:   #3b82f6;
+  --red:    #ef4444;
+  --green:  #10b981;
+  --amber:  #f59e0b;
+  --purple: #8b5cf6;
+  --indigo: #6366f1;
+  --gray:   #6b7280;
+  --bg:     #f1f5f9;
+  --card:   #ffffff;
+  --border: #e2e8f0;
+  --text:   #1e293b;
+  --muted:  #64748b;
+}
+
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+       background: var(--bg); color: var(--text); min-height: 100vh; }
+
+/* ── HEADER ── */
+header {
+  background: var(--navy); color: #fff;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 28px; height: 56px; gap: 16px;
+  position: sticky; top: 0; z-index: 100;
+  box-shadow: 0 2px 8px rgba(0,0,0,.25);
+}
+header h1 { font-size: 1.05rem; font-weight: 700; white-space: nowrap; }
+.header-right { display: flex; align-items: center; gap: 10px; }
+
+/* ── BUTTONS ── */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 14px; border-radius: 7px; font-size: .82rem; font-weight: 600;
+  border: none; cursor: pointer; text-decoration: none; transition: opacity .15s, background .15s;
+}
+.btn:hover { opacity: .88; }
+.btn-primary { background: var(--blue); color: #fff; }
+.btn-success { background: var(--green); color: #fff; }
+.btn-outline { background: transparent; color: #fff; border: 1.5px solid rgba(255,255,255,.4); }
+.btn-outline:hover { background: rgba(255,255,255,.1); opacity: 1; }
+.btn-sm { padding: 5px 10px; font-size: .78rem; }
+.btn-danger { background: var(--red); color: #fff; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+
+/* ── STATS ROW ── */
+.stats-row {
+  display: flex; gap: 12px; padding: 14px 28px; flex-wrap: wrap;
+  background: var(--navy2); border-bottom: 1px solid rgba(255,255,255,.1);
+}
+.stat-card {
+  background: rgba(255,255,255,.1); border-radius: 8px;
+  padding: 8px 16px; color: #fff; display: flex; align-items: center; gap: 8px;
+}
+.stat-card .val { font-size: 1.3rem; font-weight: 700; }
+.stat-card .lbl { font-size: .75rem; opacity: .75; }
+
+/* ── PROGRESS BAR ── */
+#progress-section {
+  background: var(--navy); padding: 12px 28px; display: none;
+  border-bottom: 1px solid rgba(255,255,255,.1);
+}
+.progress-info { color: #fff; font-size: .82rem; margin-bottom: 6px;
+                  display: flex; justify-content: space-between; }
+.progress-track { height: 8px; background: rgba(255,255,255,.2); border-radius: 99px; overflow: hidden; }
+.progress-fill  { height: 100%; background: var(--green); border-radius: 99px;
+                   transition: width .3s; width: 0%; }
+
+/* ── CONTROLS ── */
+.controls {
+  display: flex; flex-wrap: wrap; gap: 10px; padding: 14px 28px;
+  background: var(--card); border-bottom: 1px solid var(--border); align-items: center;
+}
+.controls input, .controls select {
+  border: 1px solid var(--border); border-radius: 7px; padding: 8px 12px;
+  font-size: .85rem; outline: none; background: var(--bg); color: var(--text);
+  transition: border-color .15s;
+}
+.controls input   { flex: 1; min-width: 200px; }
+.controls input:focus, .controls select:focus { border-color: var(--blue); background: #fff; }
+#result-count { margin-left: auto; font-size: .82rem; color: var(--muted); white-space: nowrap; }
+
+/* ── EXPORT BUTTONS ── */
+.export-row {
+  display: flex; gap: 8px; padding: 10px 28px;
+  background: var(--card); border-bottom: 1px solid var(--border);
+  align-items: center;
+}
+.export-row span { font-size: .8rem; color: var(--muted); margin-right: 4px; }
+
+/* ── TABLE ── */
+.table-wrap { overflow-x: auto; padding: 20px 28px 60px; }
+table {
+  width: 100%; border-collapse: collapse; background: var(--card);
+  border-radius: 10px; overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0,0,0,.08); font-size: .855rem;
+}
+thead tr { background: var(--navy); color: #fff; }
+th {
+  padding: 11px 14px; text-align: left; font-weight: 600;
+  cursor: pointer; user-select: none; white-space: nowrap;
+  transition: background .1s;
+}
+th:hover { background: var(--navy2); }
+th .arr { margin-left: 4px; font-size: .65rem; opacity: .5; }
+th.asc  .arr::after { content: "▲"; opacity: 1; }
+th.desc .arr::after { content: "▼"; opacity: 1; }
+th:not(.asc):not(.desc) .arr::after { content: "⇅"; }
+tbody tr { border-bottom: 1px solid var(--border); transition: background .1s; }
+tbody tr:hover { background: #f8fafc; }
+td { padding: 10px 14px; vertical-align: top; }
+td.date   { white-space: nowrap; color: var(--muted); font-size: .8rem; }
+td.city   { white-space: nowrap; font-weight: 500; }
+td.source { white-space: nowrap; color: var(--muted); font-size: .8rem; }
+td.snippet { color: #475569; font-size: .82rem; max-width: 320px; line-height: 1.45; }
+a.headline { color: var(--navy); font-weight: 500; text-decoration: none; line-height: 1.4; }
+a.headline:hover { text-decoration: underline; color: var(--blue); }
+.badge {
+  display: inline-block; padding: 2px 9px; border-radius: 99px;
+  font-size: .72rem; font-weight: 700; color: #fff; white-space: nowrap;
+}
+.empty { text-align: center; padding: 60px 20px; color: var(--muted); font-size: .95rem; }
+
+/* ── MODAL ── */
+.overlay {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5);
+  z-index: 200; align-items: center; justify-content: center;
+}
+.overlay.open { display: flex; }
+.modal {
+  background: var(--card); border-radius: 12px; padding: 28px;
+  width: min(560px, 94vw); max-height: 85vh; overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,.3);
+}
+.modal h2 { font-size: 1.1rem; margin-bottom: 16px; }
+.modal-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+.modal .btn-outline-dark {
+  background: transparent; color: var(--text); border: 1.5px solid var(--border);
+  padding: 7px 14px; border-radius: 7px; font-size: .82rem; font-weight: 600;
+  cursor: pointer;
+}
+.modal .btn-outline-dark:hover { background: var(--bg); }
+
+/* City manager */
+.state-block { margin-bottom: 20px; }
+.state-block h3 { font-size: .85rem; font-weight: 700; color: var(--muted);
+                   text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px; }
+.city-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.city-tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px;
+  padding: 3px 8px; font-size: .8rem; color: var(--navy);
+}
+.city-tag button {
+  background: none; border: none; cursor: pointer; color: #93c5fd;
+  font-size: .9rem; line-height: 1; padding: 0 1px;
+  transition: color .1s;
+}
+.city-tag button:hover { color: var(--red); }
+.add-city-row { display: flex; gap: 8px; margin-top: 10px; }
+.add-city-row input {
+  flex: 1; border: 1px solid var(--border); border-radius: 7px;
+  padding: 7px 11px; font-size: .85rem; outline: none;
+}
+.add-city-row input:focus { border-color: var(--blue); }
+
+/* Toast */
+#toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  background: #1e293b; color: #fff; padding: 10px 20px; border-radius: 8px;
+  font-size: .85rem; opacity: 0; transition: opacity .3s; pointer-events: none;
+  z-index: 999;
+}
+#toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <h1>🔥 CA Fire Dept News</h1>
+  <div class="header-right">
+    <button class="btn btn-outline" onclick="openCityManager()">⚙ Manage Cities</button>
+    <button class="btn btn-primary" id="scrape-btn" onclick="startScrape()">▶ Run Scrape</button>
+  </div>
+</header>
+
+<!-- PROGRESS -->
+<div id="progress-section">
+  <div class="progress-info">
+    <span id="progress-label">Fetching news…</span>
+    <span id="progress-pct">0%</span>
+  </div>
+  <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+</div>
+
+<!-- STATS -->
+<div class="stats-row" id="stats-row">
+  <div class="stat-card">
+    <div><div class="val" id="stat-total">—</div><div class="lbl">Articles</div></div>
+  </div>
+  <div class="stat-card">
+    <div><div class="val" id="stat-cities">—</div><div class="lbl">Cities</div></div>
+  </div>
+  <div class="stat-card" id="stat-last-run-card" style="display:none">
+    <div><div class="val" id="stat-last-run" style="font-size:.9rem">—</div><div class="lbl">Last Scraped</div></div>
+  </div>
+</div>
+
+<!-- CONTROLS -->
+<div class="controls">
+  <input id="search" type="text" placeholder="Search headlines, cities, sources…" oninput="applyFilters()">
+  <select id="filterCity" onchange="applyFilters()">
+    <option value="">All Cities</option>
+  </select>
+  <select id="filterCat" onchange="applyFilters()">
+    <option value="">All Categories</option>
+  </select>
+  <span id="result-count"></span>
+</div>
+
+<!-- EXPORT ROW -->
+<div class="export-row">
+  <span>Export current view:</span>
+  <button class="btn btn-sm btn-outline-dark" style="background:#f0fdf4;border-color:#bbf7d0;color:#166534" onclick="exportData('csv')">⬇ CSV</button>
+  <button class="btn btn-sm btn-outline-dark" style="background:#eff6ff;border-color:#bfdbfe;color:#1e40af" onclick="exportData('xlsx')">⬇ Excel</button>
+</div>
+
+<!-- TABLE -->
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th onclick="sortBy('date')"     data-col="date">    Date     <span class="arr"></span></th>
+        <th onclick="sortBy('city')"     data-col="city">    City     <span class="arr"></span></th>
+        <th onclick="sortBy('category')" data-col="category">Category <span class="arr"></span></th>
+        <th>Headline</th>
+        <th onclick="sortBy('source')"   data-col="source">  Source   <span class="arr"></span></th>
+        <th>Snippet</th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</div>
+
+<!-- CITY MANAGER MODAL -->
+<div class="overlay" id="city-modal">
+  <div class="modal">
+    <h2>⚙ Manage Cities</h2>
+    <div id="city-manager-body"></div>
+    <div class="modal-footer">
+      <button class="btn-outline-dark" onclick="closeCityManager()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveCities()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+const CAT_COLORS = {
+  "Budget/Funding":       "#3b82f6",
+  "Staffing/Labor":       "#8b5cf6",
+  "Leadership/Personnel": "#f59e0b",
+  "Incident/Disaster":    "#ef4444",
+  "Equipment/Stations":   "#10b981",
+  "Policy/Legislation":   "#6366f1",
+  "General":              "#6b7280",
+};
+
+let allArticles = [];
+let filtered    = [];
+let sortCol     = "date";
+let sortDir     = -1;
+let pollTimer   = null;
+let cityData    = {};
+
+// ── Init ───────────────────────────────────────────────────────────────────
+async function init() {
+  await Promise.all([loadStats(), loadArticles()]);
+  checkScrapeStatus();
+}
+
+async function loadStats() {
+  const s = await apiFetch("/api/stats");
+  if (!s) return;
+  document.getElementById("stat-total").textContent  = s.total.toLocaleString();
+  document.getElementById("stat-cities").textContent = s.cities;
+
+  const citySelect = document.getElementById("filterCity");
+  citySelect.innerHTML = '<option value="">All Cities</option>' +
+    s.city_list.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
+
+  const catSelect = document.getElementById("filterCat");
+  catSelect.innerHTML = '<option value="">All Categories</option>' +
+    s.cat_list.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
+}
+
+async function loadArticles() {
+  const data = await apiFetch("/api/articles?limit=2000");
+  if (!data) return;
+  allArticles = data.items;
+  applyFilters();
+}
+
+// ── Filters & Sort ─────────────────────────────────────────────────────────
+function applyFilters() {
+  const q    = document.getElementById("search").value.toLowerCase();
+  const city = document.getElementById("filterCity").value;
+  const cat  = document.getElementById("filterCat").value;
+
+  filtered = allArticles.filter(r => {
+    if (city && r.city !== city) return false;
+    if (cat  && r.category !== cat) return false;
+    if (q) {
+      const hay = (r.headline + r.city + r.source + r.snippet + r.category).toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  filtered.sort((a, b) => {
+    const av = (a[sortCol] || "").toString();
+    const bv = (b[sortCol] || "").toString();
+    return av < bv ? -sortDir : av > bv ? sortDir : 0;
+  });
+
+  document.getElementById("result-count").textContent =
+    filtered.length.toLocaleString() + " article" + (filtered.length !== 1 ? "s" : "");
+
+  renderTable();
+}
+
+function sortBy(col) {
+  if (sortCol === col) sortDir *= -1;
+  else { sortCol = col; sortDir = -1; }
+  document.querySelectorAll("th[data-col]").forEach(th => {
+    th.classList.remove("asc", "desc");
+    if (th.dataset.col === col) th.classList.add(sortDir === 1 ? "asc" : "desc");
+  });
+  applyFilters();
+}
+
+function renderTable() {
+  const tbody = document.getElementById("tbody");
+  if (!filtered.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">No articles yet — run a scrape to fetch news.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = filtered.map(r => {
+    const color = CAT_COLORS[r.category] || "#6b7280";
+    return `<tr>
+      <td class="date">${esc(r.date)}</td>
+      <td class="city">${esc(r.city)}</td>
+      <td><span class="badge" style="background:${color}">${esc(r.category)}</span></td>
+      <td><a class="headline" href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.headline)}</a></td>
+      <td class="source">${esc(r.source)}</td>
+      <td class="snippet">${esc(r.snippet)}</td>
+    </tr>`;
+  }).join("");
+}
+
+// ── Scraping ───────────────────────────────────────────────────────────────
+async function startScrape() {
+  const btn = document.getElementById("scrape-btn");
+  btn.disabled = true;
+  const res = await apiFetch("/api/scrape/start", { method: "POST" });
+  if (!res) { btn.disabled = false; return; }
+  showToast("Scrape started…");
+  startPolling();
+}
+
+async function checkScrapeStatus() {
+  const s = await apiFetch("/api/scrape/status");
+  if (s && s.running) startPolling();
+  if (s && s.last_run) {
+    document.getElementById("stat-last-run").textContent = s.last_run;
+    document.getElementById("stat-last-run-card").style.display = "";
+  }
+}
+
+function startPolling() {
+  if (pollTimer) return;
+  document.getElementById("progress-section").style.display = "";
+  document.getElementById("scrape-btn").disabled = true;
+  pollTimer = setInterval(pollScrape, 1200);
+}
+
+async function pollScrape() {
+  const s = await apiFetch("/api/scrape/status");
+  if (!s) return;
+
+  const pct = s.total ? Math.round((s.progress / s.total) * 100) : 0;
+  document.getElementById("progress-fill").style.width  = pct + "%";
+  document.getElementById("progress-pct").textContent   = pct + "%";
+  document.getElementById("progress-label").textContent =
+    s.running ? `Fetching: ${s.current} (${s.progress}/${s.total} queries)` : "Done!";
+
+  if (!s.running) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+    setTimeout(async () => {
+      document.getElementById("progress-section").style.display = "none";
+      document.getElementById("scrape-btn").disabled = false;
+      await Promise.all([loadStats(), loadArticles()]);
+      if (s.last_run) {
+        document.getElementById("stat-last-run").textContent = s.last_run;
+        document.getElementById("stat-last-run-card").style.display = "";
+      }
+      showToast(`Done! ${s.new_count} new articles added.`);
+    }, 1200);
+  }
+}
+
+// ── Export ─────────────────────────────────────────────────────────────────
+function exportData(fmt) {
+  const q    = encodeURIComponent(document.getElementById("search").value);
+  const city = encodeURIComponent(document.getElementById("filterCity").value);
+  const cat  = encodeURIComponent(document.getElementById("filterCat").value);
+  window.location.href = `/api/export/${fmt}?q=${q}&city=${city}&category=${cat}`;
+}
+
+// ── City Manager ───────────────────────────────────────────────────────────
+async function openCityManager() {
+  const data = await apiFetch("/api/cities");
+  if (!data) return;
+  cityData = JSON.parse(JSON.stringify(data));  // deep clone
+  renderCityManager();
+  document.getElementById("city-modal").classList.add("open");
+}
+
+function closeCityManager() {
+  document.getElementById("city-modal").classList.remove("open");
+}
+
+function renderCityManager() {
+  const body = document.getElementById("city-manager-body");
+  body.innerHTML = Object.entries(cityData).map(([state, cities]) => `
+    <div class="state-block" data-state="${esc(state)}">
+      <h3>${esc(state)}</h3>
+      <div class="city-tags" id="tags-${esc(state)}">
+        ${cities.map(c => cityTag(state, c)).join("")}
+      </div>
+      <div class="add-city-row">
+        <input type="text" placeholder="Add city…" id="add-input-${esc(state)}"
+               onkeydown="if(event.key==='Enter') addCity('${esc(state)}')">
+        <button class="btn btn-sm btn-primary" onclick="addCity('${esc(state)}')">+ Add</button>
+      </div>
+    </div>
+  `).join("");
+}
+
+function cityTag(state, city) {
+  return `<span class="city-tag">${esc(city)}
+    <button onclick="removeCity('${esc(state)}','${esc(city)}')" title="Remove">×</button>
+  </span>`;
+}
+
+function removeCity(state, city) {
+  cityData[state] = cityData[state].filter(c => c !== city);
+  renderCityManager();
+}
+
+function addCity(state) {
+  const input = document.getElementById(`add-input-${state}`);
+  const val   = input.value.trim();
+  if (!val) return;
+  if (!cityData[state].includes(val)) cityData[state].push(val);
+  input.value = "";
+  renderCityManager();
+}
+
+async function saveCities() {
+  const res = await apiFetch("/api/cities", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ cities: cityData }),
+  });
+  if (res) {
+    closeCityManager();
+    showToast("Cities saved. Run a new scrape to fetch news for updated cities.");
+  }
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+async function apiFetch(url, opts = {}) {
+  try {
+    const res = await fetch(url, opts);
+    if (!res.ok) { showToast("Error: " + res.statusText, true); return null; }
+    return await res.json();
+  } catch (e) {
+    showToast("Network error", true);
+    return null;
+  }
+}
+
+function esc(s) {
+  return String(s || "")
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+}
+
+let toastTimer;
+function showToast(msg, isError = false) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.style.background = isError ? "#dc2626" : "#1e293b";
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 3500);
+}
+
+// Set initial sort arrow
+document.querySelector('th[data-col="date"]').classList.add("desc");
+
+init();
+</script>
+</body>
+</html>

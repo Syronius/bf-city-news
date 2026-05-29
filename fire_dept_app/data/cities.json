@@ -1,0 +1,11 @@
+{
+  "California": [
+    "Los Angeles", "San Diego", "San Jose", "San Francisco", "Sacramento",
+    "Fresno", "Long Beach", "Oakland", "Bakersfield", "Anaheim",
+    "Santa Ana", "Riverside", "Stockton", "Chula Vista", "Irvine",
+    "Fremont", "San Bernardino", "Modesto", "Fontana", "Oxnard",
+    "Moreno Valley", "Glendale", "Huntington Beach", "Santa Clarita",
+    "Garden Grove", "Oceanside", "Rancho Cucamonga", "Santa Rosa",
+    "Ontario", "Elk Grove"
+  ]
+}
