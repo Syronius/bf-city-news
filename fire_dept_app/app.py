@@ -144,6 +144,10 @@ scrape_state = {
     "total":    0,
     "current":  "",
     "new_count": 0,
+    "cities_done":    0,
+    "cities_total":   0,
+    "counties_done":  0,
+    "counties_total": 0,
     "error":    None,
     "last_run": None,
 }
@@ -151,10 +155,12 @@ scrape_lock = threading.Lock()
 
 def run_scrape():
     with scrape_lock:
-        scrape_state["running"]   = True
-        scrape_state["progress"]  = 0
-        scrape_state["new_count"] = 0
-        scrape_state["error"]     = None
+        scrape_state["running"]       = True
+        scrape_state["progress"]      = 0
+        scrape_state["new_count"]     = 0
+        scrape_state["cities_done"]   = 0
+        scrape_state["counties_done"] = 0
+        scrape_state["error"]         = None
 
     try:
         cities_cfg   = load_json(CFG_PATH)
@@ -162,18 +168,24 @@ def run_scrape():
 
         # Each target: (state, kind, label, place). `place` is the phrase put in
         # the search query; `label` is what's stored in the city/county column.
+        city_targets = [(state, "city", city, city)
+                        for state, cities in cities_cfg.items() for city in cities]
+        county_targets = [(state, "county", county, f"{county} County")
+                          for state, counties in counties_cfg.items() for county in counties]
+
+        # Interleave cities and counties so both show progress from the start —
+        # otherwise all cities scrape first and counties look stalled for minutes.
         targets = []
-        for state, cities in cities_cfg.items():
-            for city in cities:
-                targets.append((state, "city", city, city))
-        for state, counties in counties_cfg.items():
-            for county in counties:
-                targets.append((state, "county", county, f"{county} County"))
+        for i in range(max(len(city_targets), len(county_targets))):
+            if i < len(city_targets):   targets.append(city_targets[i])
+            if i < len(county_targets): targets.append(county_targets[i])
 
         total = len(targets) * len(QUERY_TEMPLATES)
 
         with scrape_lock:
-            scrape_state["total"] = total
+            scrape_state["total"]          = total
+            scrape_state["cities_total"]   = len(city_targets)
+            scrape_state["counties_total"] = len(county_targets)
 
         done = 0
         new_count = 0
@@ -214,6 +226,10 @@ def run_scrape():
                     with scrape_lock:
                         scrape_state["progress"]  = done
                         scrape_state["new_count"] = new_count
+
+                with scrape_lock:
+                    if kind == "county": scrape_state["counties_done"] += 1
+                    else:                scrape_state["cities_done"]   += 1
         finally:
             conn.close()
 

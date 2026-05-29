@@ -653,8 +653,9 @@ async function pollScrape() {
   const pct = s.total ? Math.round((s.progress / s.total) * 100) : 0;
   document.getElementById("progress-fill").style.width  = pct + "%";
   document.getElementById("progress-pct").textContent   = pct + "%";
-  document.getElementById("progress-label").textContent =
-    s.running ? `Fetching: ${s.current} (${s.progress}/${s.total} queries)` : "Done!";
+  document.getElementById("progress-label").textContent = s.running
+    ? `Fetching: ${s.current}  ·  Cities ${s.cities_done}/${s.cities_total}, Counties ${s.counties_done}/${s.counties_total}`
+    : "Done!";
 
   if (!s.running) {
     clearInterval(pollTimer);
