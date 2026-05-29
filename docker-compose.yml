@@ -1,8 +1,10 @@
 services:
   app:
     build: ./fire_dept_app
-    # No host port mapping: Coolify's proxy handles bridge networking and
-    # routes to the container's exposed port (5555) over its internal network.
+    # Publish the container port to the host so the Cloudflare tunnel can
+    # reach the app at 192.168.8.160:5555.
+    ports:
+      - "5555:5555"
     environment:
       # app.py reads PORT to choose the uvicorn bind port (default 8000).
       - PORT=5555
