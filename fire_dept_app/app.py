@@ -101,6 +101,31 @@ HEADERS = {
     )
 }
 
+# ---------------------------------------------------------------------------
+# BUILT-IN CONTENT-EXCLUSION FILTERS
+# ---------------------------------------------------------------------------
+# Two opt-out filters surfaced in the UI as default-on toggles. They hide
+# articles whose headline/snippet reads as a vehicle/auto crash or an obituary
+# notice — categories that pollute the fire-department feed but still get
+# auto-tagged "Incident/Disaster", so they can't be removed by category alone.
+#
+# IMPORTANT: keep these two lists byte-for-byte in sync with EXCLUDE_AUTO /
+# EXCLUDE_OBIT in static/index.html — the frontend filters the table view with
+# the same words; these power the matching CSV/Excel export.
+EXCLUDE_AUTO_KEYWORDS = [
+    "car crash", "car accident", "car fire", "vehicle crash", "vehicle fire",
+    "auto crash", "traffic collision", "traffic accident", "head-on",
+    "rollover", "roll-over", "pileup", "pile-up", "multi-vehicle", "multi vehicle",
+    "dui", "freeway", "highway crash", "motorcycle", "big rig", "semi-truck",
+    "semi truck", "tractor-trailer", "tractor trailer", "hit-and-run",
+    "hit and run", "pedestrian struck", "fiery crash", "collision", "overturned",
+]
+EXCLUDE_OBIT_KEYWORDS = [
+    "obituary", "obituaries", "passed away", "in memoriam", "celebration of life",
+    "funeral", "memorial service", "visitation", "death notice", "laid to rest",
+    "survived by", "in loving memory",
+]
+
 def categorize(headline: str, snippet: str) -> str:
     import xml.etree.ElementTree as ET
     text = (headline + " " + snippet).lower()
@@ -258,6 +283,8 @@ def get_articles(
     city:     Optional[str] = Query(None),
     county:   Optional[str] = Query(None),
     category: Optional[str] = Query(None),
+    exclude_auto:  bool = Query(False),  # hide vehicle/auto-crash stories
+    exclude_obits: bool = Query(False),  # hide obituary / death-notice stories
     limit:    int = Query(500, le=2000),
     offset:   int = Query(0),
 ):
@@ -281,6 +308,15 @@ def get_articles(
         sql += " AND (headline LIKE ? OR snippet LIKE ? OR source LIKE ? OR city LIKE ? OR county LIKE ?)"
         like = f"%{q}%"
         params += [like, like, like, like, like]
+
+    # Built-in exclusion toggles (default-on in the UI). Match headline + snippet
+    # case-insensitively; a single keyword hit drops the article.
+    for active, keywords in ((exclude_auto, EXCLUDE_AUTO_KEYWORDS),
+                             (exclude_obits, EXCLUDE_OBIT_KEYWORDS)):
+        if active:
+            for kw in keywords:
+                sql += " AND LOWER(headline || ' ' || COALESCE(snippet,'')) NOT LIKE ?"
+                params.append(f"%{kw}%")
 
     sql += " ORDER BY date DESC, id DESC LIMIT ? OFFSET ?"
     params += [limit, offset]
@@ -386,8 +422,11 @@ def export_csv(
     city:     Optional[str] = Query(None),
     county:   Optional[str] = Query(None),
     category: Optional[str] = Query(None),
+    exclude_auto:  bool = Query(False),
+    exclude_obits: bool = Query(False),
 ):
-    data = get_articles(q=q, scope=scope, city=city, county=county, category=category, limit=10000, offset=0)
+    data = get_articles(q=q, scope=scope, city=city, county=county, category=category,
+                        exclude_auto=exclude_auto, exclude_obits=exclude_obits, limit=10000, offset=0)
     df   = pd.DataFrame(data["items"])
     if df.empty:
         raise HTTPException(404, "No data to export")
@@ -409,8 +448,11 @@ def export_xlsx(
     city:     Optional[str] = Query(None),
     county:   Optional[str] = Query(None),
     category: Optional[str] = Query(None),
+    exclude_auto:  bool = Query(False),
+    exclude_obits: bool = Query(False),
 ):
-    data = get_articles(q=q, scope=scope, city=city, county=county, category=category, limit=10000, offset=0)
+    data = get_articles(q=q, scope=scope, city=city, county=county, category=category,
+                        exclude_auto=exclude_auto, exclude_obits=exclude_obits, limit=10000, offset=0)
     df   = pd.DataFrame(data["items"])
     if df.empty:
         raise HTTPException(404, "No data to export")

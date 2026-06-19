@@ -92,6 +92,41 @@ header h1 { font-size: 1.05rem; font-weight: 700; white-space: nowrap; }
 .controls input:focus, .controls select:focus { border-color: var(--blue); background: #fff; }
 #result-count { margin-left: auto; font-size: .82rem; color: var(--muted); white-space: nowrap; }
 
+/* ── HIDE DROPDOWN ── */
+.hide-dropdown { position: relative; align-self: stretch; }
+.hide-toggle {
+  display: inline-flex; align-items: center; gap: 7px; height: 100%;
+  border: 1px solid var(--border); border-radius: 7px;
+  padding: 8px 12px; font-size: .85rem; background: var(--bg); color: var(--text);
+  cursor: pointer; white-space: nowrap; transition: border-color .15s;
+}
+.hide-toggle:hover  { border-color: var(--blue); }
+.hide-toggle .caret { font-size: .7rem; color: var(--muted); }
+.hide-count {
+  background: var(--blue); color: #fff; border-radius: 99px;
+  font-size: .68rem; font-weight: 700; min-width: 16px; height: 16px;
+  display: inline-flex; align-items: center; justify-content: center; padding: 0 5px;
+}
+.hide-count:empty,
+.hide-count[data-n="0"] { display: none; }
+.hide-menu {
+  display: none; position: absolute; top: calc(100% + 6px); left: 0; z-index: 150;
+  background: var(--card); border: 1px solid var(--border); border-radius: 9px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.14); padding: 7px; min-width: 190px;
+}
+.hide-menu.open { display: block; }
+.hide-menu label {
+  display: flex; align-items: center; gap: 8px; padding: 7px 9px;
+  font-size: .85rem; border-radius: 6px; cursor: pointer; user-select: none; white-space: nowrap;
+}
+.hide-menu label:hover { background: var(--bg); }
+.hide-menu input[type="checkbox"] {
+  flex: none; width: 15px; min-width: 0; height: 15px; cursor: pointer; accent-color: var(--blue);
+}
+
+/* Make the inline action buttons match the height of the fields beside them */
+.controls .btn { align-self: stretch; }
+
 /* ── EXPORT BUTTONS ── */
 .export-row {
   display: flex; gap: 8px; padding: 10px 28px;
@@ -286,6 +321,16 @@ a.headline:hover { text-decoration: underline; color: var(--blue); }
   <select id="filterCat" onchange="applyFilters()">
     <option value="">All Categories</option>
   </select>
+  <div class="hide-dropdown" id="hideDropdown">
+    <button type="button" class="hide-toggle" onclick="toggleHideMenu(event)"
+            title="Choose which kinds of stories to hide">
+      Hide <span class="hide-count" id="hideCount">2</span> <span class="caret">▾</span>
+    </button>
+    <div class="hide-menu" id="hideMenu">
+      <label><input type="checkbox" id="excludeAuto" checked onchange="applyFilters()"> Vehicle crashes</label>
+      <label><input type="checkbox" id="excludeObits" checked onchange="applyFilters()"> Death notices</label>
+    </div>
+  </div>
   <span id="result-count"></span>
 </div>
 
@@ -408,6 +453,25 @@ const CAT_COLORS = {
   "General":              "#6b7280",
 };
 
+// Built-in content-exclusion keyword lists, powering the default-on "Hide"
+// toggles. A single keyword hit (case-insensitive, headline + snippet) drops
+// the article from the view.
+// IMPORTANT: keep in sync with EXCLUDE_AUTO_KEYWORDS / EXCLUDE_OBIT_KEYWORDS in
+// app.py — the backend applies the same words to CSV/Excel export.
+const EXCLUDE_AUTO = [
+  "car crash", "car accident", "car fire", "vehicle crash", "vehicle fire",
+  "auto crash", "traffic collision", "traffic accident", "head-on",
+  "rollover", "roll-over", "pileup", "pile-up", "multi-vehicle", "multi vehicle",
+  "dui", "freeway", "highway crash", "motorcycle", "big rig", "semi-truck",
+  "semi truck", "tractor-trailer", "tractor trailer", "hit-and-run",
+  "hit and run", "pedestrian struck", "fiery crash", "collision", "overturned",
+];
+const EXCLUDE_OBIT = [
+  "obituary", "obituaries", "passed away", "in memoriam", "celebration of life",
+  "funeral", "memorial service", "visitation", "death notice", "laid to rest",
+  "survived by", "in loving memory",
+];
+
 let allArticles = [];
 let filtered    = [];
 let sortCol     = "date";
@@ -483,15 +547,27 @@ async function loadArticles() {
 
 // ── Filters & Sort ─────────────────────────────────────────────────────────
 function applyFilters() {
-  const q   = document.getElementById("search").value.toLowerCase();
-  const loc = document.getElementById("filterLoc").value;
-  const cat = document.getElementById("filterCat").value;
+  const q       = document.getElementById("search").value.toLowerCase();
+  const loc     = document.getElementById("filterLoc").value;
+  const cat     = document.getElementById("filterCat").value;
+  const exAuto  = document.getElementById("excludeAuto").checked;
+  const exObits = document.getElementById("excludeObits").checked;
+
+  const nHidden = (exAuto ? 1 : 0) + (exObits ? 1 : 0);
+  const badge   = document.getElementById("hideCount");
+  badge.textContent = nHidden || "";
+  badge.dataset.n   = nHidden;
 
   filtered = allArticles.filter(r => {
     const isCity   = !!(r.city   && r.city.trim());
     const isCounty = !!(r.county && r.county.trim());
     if (currentScope === "cities"   && !isCity)   return false;
     if (currentScope === "counties" && !isCounty) return false;
+    if (exAuto || exObits) {
+      const body = (r.headline + " " + r.snippet).toLowerCase();
+      if (exAuto  && EXCLUDE_AUTO.some(k => body.includes(k))) return false;
+      if (exObits && EXCLUDE_OBIT.some(k => body.includes(k))) return false;
+    }
     if (loc) {
       if (currentScope === "cities"   && r.city   !== loc) return false;
       if (currentScope === "counties" && r.county !== loc) return false;
@@ -679,11 +755,25 @@ function exportData(fmt) {
   const p     = new URLSearchParams();
   p.set("q", document.getElementById("search").value);
   p.set("category", document.getElementById("filterCat").value);
+  if (document.getElementById("excludeAuto").checked)  p.set("exclude_auto", "1");
+  if (document.getElementById("excludeObits").checked) p.set("exclude_obits", "1");
   if (currentScope !== "all") p.set("scope", currentScope);
   if (loc && currentScope === "cities")   p.set("city", loc);
   if (loc && currentScope === "counties") p.set("county", loc);
   window.location.href = `/api/export/${fmt}?${p.toString()}`;
 }
+
+// ── Hide dropdown ───────────────────────────────────────────────────────────
+function toggleHideMenu(e) {
+  e.stopPropagation();
+  document.getElementById("hideMenu").classList.toggle("open");
+}
+// Close the menu on any outside click.
+document.addEventListener("click", e => {
+  const dd = document.getElementById("hideDropdown");
+  if (dd && !dd.contains(e.target))
+    document.getElementById("hideMenu").classList.remove("open");
+});
 
 // ── About ────────────────────────────────────────────────────────────────
 function openAbout()  { document.getElementById("about-modal").classList.add("open"); }
