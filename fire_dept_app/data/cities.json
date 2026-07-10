@@ -7,5 +7,30 @@
     "Moreno Valley", "Glendale", "Huntington Beach", "Santa Clarita",
     "Garden Grove", "Oceanside", "Rancho Cucamonga", "Santa Rosa",
     "Ontario", "Elk Grove"
+  ],
+  "Oregon": [
+    "Portland", "Eugene", "Salem", "Hillsboro", "Gresham",
+    "Bend", "Beaverton", "Medford", "Springfield", "Corvallis",
+    "Albany", "Tigard", "Lake Oswego", "Keizer", "Grants Pass"
+  ],
+  "Washington": [
+    "Seattle", "Spokane", "Tacoma", "Vancouver", "Bellevue",
+    "Kent", "Everett", "Renton", "Spokane Valley", "Federal Way",
+    "Yakima", "Kirkland", "Bellingham", "Auburn", "Kennewick"
+  ],
+  "Arizona": [
+    "Phoenix", "Tucson", "Mesa", "Chandler", "Gilbert",
+    "Glendale", "Scottsdale", "Peoria", "Tempe", "Surprise",
+    "Buckeye", "Goodyear", "Yuma", "Avondale", "Flagstaff"
+  ],
+  "Colorado": [
+    "Denver", "Colorado Springs", "Aurora", "Fort Collins", "Lakewood",
+    "Thornton", "Arvada", "Westminster", "Pueblo", "Greeley",
+    "Centennial", "Boulder", "Longmont", "Loveland", "Broomfield"
+  ],
+  "Utah": [
+    "Salt Lake City", "West Valley City", "West Jordan", "Provo", "Orem",
+    "Sandy", "St. George", "Ogden", "Layton", "South Jordan",
+    "Lehi", "Millcreek", "Taylorsville", "Herriman", "Logan"
   ]
 }

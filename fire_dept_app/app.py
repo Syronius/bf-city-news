@@ -1,6 +1,6 @@
 """
-California Fire Department News — Local Web App
-================================================
+Fire News Radar — Local Web App
+================================
 Install:  pip install fastapi "uvicorn[standard]" requests pandas openpyxl
 Run:      python app.py
 Open:     http://localhost:8000
@@ -75,13 +75,17 @@ def load_json(path: Path) -> dict:
 # ---------------------------------------------------------------------------
 # SCRAPER LOGIC
 # ---------------------------------------------------------------------------
+# Queries carry the state because place names repeat across states — "Glendale"
+# matches California, Arizona and Missouri. Since `url` is UNIQUE and inserts are
+# INSERT OR IGNORE, an unqualified query lets the first state scraped claim the
+# article and leaves every later state reading as empty.
 QUERY_TEMPLATES = [
-    '"{place}" fire department',
-    '"{place}" fire department budget',
-    '"{place}" fire department staffing',
-    '"{place}" fire department chief',
-    '"{place}" wildfire emergency',
-    '"{place}" fire department incident',
+    '"{place}" {state} fire department',
+    '"{place}" {state} fire department budget',
+    '"{place}" {state} fire department staffing',
+    '"{place}" {state} fire department chief',
+    '"{place}" {state} wildfire emergency',
+    '"{place}" {state} fire department incident',
 ]
 
 CATEGORIES = {
@@ -226,7 +230,7 @@ def run_scrape():
                     scrape_state["current"] = f"{label}{suffix}, {state}"
 
                 for template in QUERY_TEMPLATES:
-                    query = template.format(place=place)
+                    query = template.format(place=place, state=state)
                     results = fetch_rss(query)
 
                     for r in results:
@@ -280,6 +284,7 @@ app = FastAPI(title="Fire Dept News")
 def get_articles(
     q:        Optional[str] = Query(None),
     scope:    Optional[str] = Query(None),  # "cities" | "counties" | None (all)
+    state:    Optional[str] = Query(None),
     city:     Optional[str] = Query(None),
     county:   Optional[str] = Query(None),
     category: Optional[str] = Query(None),
@@ -295,6 +300,9 @@ def get_articles(
         sql += " AND city <> ''"
     elif scope == "counties":
         sql += " AND county <> ''"
+    if state:
+        sql += " AND state = ?"
+        params.append(state)
     if city:
         sql += " AND city = ?"
         params.append(city)
@@ -340,29 +348,38 @@ def get_articles(
 def get_stats():
     with get_db() as conn:
         total       = conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
-        cities      = conn.execute("SELECT COUNT(DISTINCT city) FROM articles WHERE city <> ''").fetchone()[0]
-        counties    = conn.execute("SELECT COUNT(DISTINCT county) FROM articles WHERE county <> ''").fetchone()[0]
+        # Count each place once per state — Glendale CA and Glendale AZ are two places.
+        cities      = conn.execute("SELECT COUNT(DISTINCT state || '|' || city) FROM articles WHERE city <> ''").fetchone()[0]
+        counties    = conn.execute("SELECT COUNT(DISTINCT state || '|' || county) FROM articles WHERE county <> ''").fetchone()[0]
         by_cat      = conn.execute(
             "SELECT category, COUNT(*) as n FROM articles GROUP BY category ORDER BY n DESC"
         ).fetchall()
-        city_list   = conn.execute(
-            "SELECT DISTINCT city FROM articles WHERE city <> '' ORDER BY city"
+        city_rows   = conn.execute(
+            "SELECT DISTINCT state, city FROM articles WHERE city <> '' ORDER BY state, city"
         ).fetchall()
-        county_list = conn.execute(
-            "SELECT DISTINCT county FROM articles WHERE county <> '' ORDER BY county"
+        county_rows = conn.execute(
+            "SELECT DISTINCT state, county FROM articles WHERE county <> '' ORDER BY state, county"
         ).fetchall()
         cat_list    = conn.execute(
             "SELECT DISTINCT category FROM articles ORDER BY category"
         ).fetchall()
 
+    cities_by_state:   dict = {}
+    counties_by_state: dict = {}
+    for state, city in city_rows:
+        cities_by_state.setdefault(state, []).append(city)
+    for state, county in county_rows:
+        counties_by_state.setdefault(state, []).append(county)
+
     return {
-        "total":       total,
-        "cities":      cities,
-        "counties":    counties,
-        "by_cat":      [dict(r) for r in by_cat],
-        "city_list":   [r[0] for r in city_list],
-        "county_list": [r[0] for r in county_list],
-        "cat_list":    [r[0] for r in cat_list],
+        "total":             total,
+        "cities":            cities,
+        "counties":          counties,
+        "by_cat":            [dict(r) for r in by_cat],
+        "state_list":        sorted(set(cities_by_state) | set(counties_by_state)),
+        "cities_by_state":   cities_by_state,
+        "counties_by_state": counties_by_state,
+        "cat_list":          [r[0] for r in cat_list],
     }
 
 
@@ -419,13 +436,14 @@ def update_counties(payload: CountiesPayload):
 def export_csv(
     q:        Optional[str] = Query(None),
     scope:    Optional[str] = Query(None),
+    state:    Optional[str] = Query(None),
     city:     Optional[str] = Query(None),
     county:   Optional[str] = Query(None),
     category: Optional[str] = Query(None),
     exclude_auto:  bool = Query(False),
     exclude_obits: bool = Query(False),
 ):
-    data = get_articles(q=q, scope=scope, city=city, county=county, category=category,
+    data = get_articles(q=q, scope=scope, state=state, city=city, county=county, category=category,
                         exclude_auto=exclude_auto, exclude_obits=exclude_obits, limit=10000, offset=0)
     df   = pd.DataFrame(data["items"])
     if df.empty:
@@ -445,13 +463,14 @@ def export_csv(
 def export_xlsx(
     q:        Optional[str] = Query(None),
     scope:    Optional[str] = Query(None),
+    state:    Optional[str] = Query(None),
     city:     Optional[str] = Query(None),
     county:   Optional[str] = Query(None),
     category: Optional[str] = Query(None),
     exclude_auto:  bool = Query(False),
     exclude_obits: bool = Query(False),
 ):
-    data = get_articles(q=q, scope=scope, city=city, county=county, category=category,
+    data = get_articles(q=q, scope=scope, state=state, city=city, county=county, category=category,
                         exclude_auto=exclude_auto, exclude_obits=exclude_obits, limit=10000, offset=0)
     df   = pd.DataFrame(data["items"])
     if df.empty:

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CA Fire Dept News</title>
+<title>Fire News Radar</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath fill='%23ef4444' d='M16 2c2 5-3 7-3 11a3 3 0 0 0 6 0c0-1-.5-2-.5-2 3 2 5 5 5 9a7.5 7.5 0 0 1-15 0c0-6 5-9 7.5-18z'/%3E%3Cpath fill='%23f59e0b' d='M16 16c1 2-1.5 3-1.5 5a3.5 3.5 0 0 0 7 0c0-3-2.5-4.5-2.5-7-1.5 1.5-2 2.5-3 2z'/%3E%3C/svg%3E">
 
 <style>
@@ -274,7 +274,7 @@ a.headline:hover { text-decoration: underline; color: var(--blue); }
 
 <!-- HEADER -->
 <header>
-  <h1>🔥 CA Fire Dept News</h1>
+  <h1>🔥 Fire News Radar</h1>
   <div class="header-right">
     <button class="btn btn-outline" onclick="openAbout()">ⓘ About</button>
     <button class="btn btn-outline" onclick="openManager('cities')">⚙ Cities</button>
@@ -315,6 +315,9 @@ a.headline:hover { text-decoration: underline; color: var(--blue); }
   <button class="btn btn-sm btn-primary" onclick="saveProfile()" title="Save current filters as a profile">＋ Save</button>
   <button class="btn btn-sm btn-danger" id="delete-profile-btn" onclick="deleteProfile()" title="Delete this profile" style="display:none">🗑</button>
   <input id="search" type="text" placeholder="Search headlines, locations, sources…" oninput="applyFilters()">
+  <select id="filterState" onchange="onStateChange()">
+    <option value="">All States</option>
+  </select>
   <select id="filterLoc" onchange="applyFilters()">
     <option value="">All Locations</option>
   </select>
@@ -375,7 +378,9 @@ a.headline:hover { text-decoration: underline; color: var(--blue); }
   <div class="modal wide">
     <h2>🔥 About this app</h2>
     <p class="about-intro">
-      A live tool that aggregates California fire-department news by <b>city</b> and <b>county</b>.
+      A live tool that aggregates fire-department news across six states —
+      <b>California</b>, <b>Oregon</b>, <b>Washington</b>, <b>Arizona</b>, <b>Colorado</b>, and <b>Utah</b> —
+      by <b>city</b> and <b>county</b>.
       You choose what to track, click <b>Run Scrape</b>, and the app pulls fresh coverage from
       Google News, auto-categorizes each story, and lets you filter, search, and export it.
     </p>
@@ -453,6 +458,8 @@ const CAT_COLORS = {
   "General":              "#6b7280",
 };
 
+const STATE_ABBR = { California:"CA", Oregon:"OR", Washington:"WA", Arizona:"AZ", Colorado:"CO", Utah:"UT" };
+
 // Built-in content-exclusion keyword lists, powering the default-on "Hide"
 // toggles. A single keyword hit (case-insensitive, headline + snippet) drops
 // the article from the view.
@@ -477,7 +484,7 @@ let filtered    = [];
 let sortCol     = "date";
 let sortDir     = -1;
 let pollTimer   = null;
-let stats       = { city_list: [], county_list: [], cat_list: [] };
+let stats       = { state_list: [], cities_by_state: {}, counties_by_state: {}, cat_list: [] };
 
 // Search profiles. Built-ins set the scope (which kind of article to show);
 // custom profiles also capture location/category/search and live in localStorage.
@@ -510,6 +517,12 @@ async function loadStats() {
   document.getElementById("stat-cities").textContent   = s.cities;
   document.getElementById("stat-counties").textContent = s.counties;
 
+  const stSel  = document.getElementById("filterState");
+  const prevSt = stSel.value;
+  stSel.innerHTML = '<option value="">All States</option>' +
+    s.state_list.map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join("");
+  stSel.value = prevSt;
+
   renderLocationOptions();
 
   const catSelect = document.getElementById("filterCat");
@@ -523,14 +536,21 @@ async function loadStats() {
 function renderLocationOptions() {
   const sel  = document.getElementById("filterLoc");
   const prev = sel.value;
+  const st   = document.getElementById("filterState").value;
+  // Scope the place list to the selected state, or a deduped, sorted union of
+  // all states when none is selected.
+  const placesFor = byState => {
+    if (st) return byState[st] || [];
+    return [...new Set(Object.values(byState).flat())].sort();
+  };
   if (currentScope === "cities") {
     sel.disabled = false;
     sel.innerHTML = '<option value="">All Cities</option>' +
-      stats.city_list.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
+      placesFor(stats.cities_by_state).map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
   } else if (currentScope === "counties") {
     sel.disabled = false;
     sel.innerHTML = '<option value="">All Counties</option>' +
-      stats.county_list.map(c => `<option value="${esc(c)}">${esc(c)} County</option>`).join("");
+      placesFor(stats.counties_by_state).map(c => `<option value="${esc(c)}">${esc(c)} County</option>`).join("");
   } else {
     sel.disabled = true;
     sel.innerHTML = '<option value="">All Locations</option>';
@@ -538,8 +558,18 @@ function renderLocationOptions() {
   sel.value = prev;  // preserve selection if still valid
 }
 
+// Changing state refetches: /api/articles caps at the 2,000 most-recent rows,
+// so the window must be drawn per-state or small states show almost nothing.
+async function onStateChange() {
+  renderLocationOptions();
+  await loadArticles();
+}
+
 async function loadArticles() {
-  const data = await apiFetch("/api/articles?limit=2000");
+  const st = document.getElementById("filterState").value;
+  const p  = new URLSearchParams({ limit: "2000" });
+  if (st) p.set("state", st);
+  const data = await apiFetch(`/api/articles?${p.toString()}`);
   if (!data) return;
   allArticles = data.items;
   applyFilters();
@@ -574,7 +604,7 @@ function applyFilters() {
     }
     if (cat && r.category !== cat) return false;
     if (q) {
-      const hay = (r.headline + (r.city || "") + (r.county || "") +
+      const hay = (r.headline + (r.city || "") + (r.county || "") + (r.state || "") +
                    r.source + r.snippet + r.category).toLowerCase();
       if (!hay.includes(q)) return false;
     }
@@ -612,7 +642,9 @@ function renderTable() {
   tbody.innerHTML = filtered.map(r => {
     const color    = CAT_COLORS[r.category] || "#6b7280";
     const isCounty = !(r.city && r.city.trim()) && (r.county && r.county.trim());
-    const locName  = isCounty ? `${r.county} County` : (r.city || "");
+    const baseName = isCounty ? `${r.county} County` : (r.city || "");
+    const abbr     = r.state ? (STATE_ABBR[r.state] || r.state) : "";
+    const locName  = abbr ? `${baseName}, ${abbr}` : baseName;
     const locTag   = isCounty
       ? '<span class="loc-tag county">County</span>'
       : (r.city ? '<span class="loc-tag city">City</span>' : "");
@@ -653,16 +685,17 @@ function renderProfileSelect() {
 }
 
 // Apply a profile: set scope, rebuild the location list, then restore filters.
-function applyProfile(id) {
+async function applyProfile(id) {
   const p = getProfile(id);
   activeProfile = p.id;
   currentScope  = p.scope;
+  document.getElementById("filterState").value = p.state || "";
   renderLocationOptions();
   document.getElementById("filterLoc").value = p.location || "";
   document.getElementById("filterCat").value = p.category || "";
   document.getElementById("search").value    = p.search   || "";
   document.getElementById("delete-profile-btn").style.display = p.builtin ? "none" : "";
-  applyFilters();
+  await loadArticles();
 }
 
 function saveProfile() {
@@ -672,6 +705,7 @@ function saveProfile() {
     id:       "c" + Date.now(),
     name,
     scope:    currentScope,
+    state:    document.getElementById("filterState").value,
     location: document.getElementById("filterLoc").value,
     category: document.getElementById("filterCat").value,
     search:   document.getElementById("search").value,
@@ -752,11 +786,13 @@ async function pollScrape() {
 // ── Export ─────────────────────────────────────────────────────────────────
 function exportData(fmt) {
   const loc   = document.getElementById("filterLoc").value;
+  const st    = document.getElementById("filterState").value;
   const p     = new URLSearchParams();
   p.set("q", document.getElementById("search").value);
   p.set("category", document.getElementById("filterCat").value);
   if (document.getElementById("excludeAuto").checked)  p.set("exclude_auto", "1");
   if (document.getElementById("excludeObits").checked) p.set("exclude_obits", "1");
+  if (st) p.set("state", st);
   if (currentScope !== "all") p.set("scope", currentScope);
   if (loc && currentScope === "cities")   p.set("city", loc);
   if (loc && currentScope === "counties") p.set("county", loc);

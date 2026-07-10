@@ -5,5 +5,25 @@
     "Kern", "Ventura", "San Francisco", "San Mateo", "San Joaquin",
     "Stanislaus", "Sonoma", "Tulare", "Santa Barbara", "Solano",
     "Monterey", "Placer", "San Luis Obispo", "Santa Cruz", "Marin"
+  ],
+  "Oregon": [
+    "Multnomah", "Washington", "Clackamas", "Lane", "Marion",
+    "Jackson", "Deschutes", "Linn", "Douglas", "Yamhill"
+  ],
+  "Washington": [
+    "King", "Pierce", "Snohomish", "Spokane", "Clark",
+    "Thurston", "Kitsap", "Yakima", "Whatcom", "Benton"
+  ],
+  "Arizona": [
+    "Maricopa", "Pima", "Pinal", "Yavapai", "Mohave",
+    "Yuma", "Coconino", "Cochise", "Navajo", "Apache"
+  ],
+  "Colorado": [
+    "El Paso", "Denver", "Arapahoe", "Jefferson", "Adams",
+    "Larimer", "Douglas", "Boulder", "Weld", "Pueblo"
+  ],
+  "Utah": [
+    "Salt Lake", "Utah", "Davis", "Weber", "Washington",
+    "Cache", "Tooele", "Box Elder", "Iron", "Summit"
   ]
 }
